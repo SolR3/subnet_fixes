@@ -1,0 +1,29 @@
+volumes:
+  pg_data_1_5_2:
+
+services:
+  db_1_5_2:
+    image: postgres:16-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: patrol
+      POSTGRES_PASSWORD: password
+    volumes:
+      - pg_data_tmp:/var/lib/postgresql/data
+
+  validator_1_5_2:
+    init: true
+    depends_on:
+      - db_1_5_2
+    image: public.ecr.aws/c9f7n4n0/patrol/validator:1.5.2
+    pull_policy: always
+    restart: unless-stopped
+    environment:
+      DB_URL: postgresql+asyncpg://patrol:password@db_1_5_2:5432/patrol
+      ENABLE_AUTO_UPDATE: 0
+      # ARCHIVE_SUBTENSOR: ws://157.90.13.58:9944
+      # WALLET_NAME: my_wallet
+      # HOTKEY_NAME: my_hotkey
+    volumes:
+      - ~/.bittensor/wallets:/root/.bittensor/wallets:ro
