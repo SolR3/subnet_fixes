@@ -378,7 +378,7 @@ class BaseValidatorNeuron(BaseNeuron):
             bt.logging.debug("uint_uids", uint_uids)
 
             max_retries = 5
-            delay_between_retries = 5  # seconds
+            delay_between_retries = 12  # seconds
             for attempt in range(max_retries):
                 # Set the weights on chain via our subtensor connection.
                 result, msg = self.subtensor.set_weights(
