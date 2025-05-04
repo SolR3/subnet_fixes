@@ -282,6 +282,8 @@ class BaseValidatorNeuron(BaseNeuron):
                 break
             else:
                 bt.logging.error("set_weights failed", msg)
+                if "No attempt made." in msg:
+                    break
                 if attempt < max_retries - 1:
                     bt.logging.info(f"Retrying in {delay_between_retries} seconds...")
                     time.sleep(delay_between_retries)
