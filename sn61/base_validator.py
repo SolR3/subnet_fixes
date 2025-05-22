@@ -205,16 +205,23 @@ class Validator(BaseValidator):
         self.update_miner_commits(self.active_challenges)
         bt.logging.success(f"[FORWARD] Miner commits updated for {date_time}")
 
+        # Update miner infos
+        for challenge_name, challenge_manager in self.challenge_managers.items():
+            miner_commits_for_this_challenge = []
+            for (uid, hotkey), commits in self.miner_commits.items():
+                for _challenge_name, commit in commits.items():
+                    if _challenge_name == challenge_name:
+                        miner_commits_for_this_challenge.append(commit)
+
+            challenge_manager.update_miner_infos(
+                miner_commits=miner_commits_for_this_challenge
+            )
+        bt.logging.success(
+            f"[FORWARD] Miner infos in challenge managers updated for {date_time}"
+        )
+
         revealed_commits = self.get_revealed_commits()
         bt.logging.success(f"[FORWARD] Revealed commits updated for {date_time}")
-
-        # Update miner infos
-        for challenge, challenge_manager in self.challenge_managers.items():
-            if challenge not in revealed_commits:
-                continue
-            challenge_manager.update_miner_infos(
-                miner_commits=revealed_commits.get(challenge, [])
-            )
 
         # Forward the revealed commits to the appropriate scoring method
         if self.config.validator.use_centralized_scoring:
@@ -484,6 +491,7 @@ class Validator(BaseValidator):
 
             # Extract encrypted commits
             encrypted_commits = [commit.encrypted_commit for commit in revealed_commits]
+            encrypted_commits_set = set(encrypted_commits)
 
             # Query centralized scoring server
             endpoint = f"{constants.REWARDING_URL}/get_scoring_result"
@@ -499,7 +507,8 @@ class Validator(BaseValidator):
             data = response.json().get("data", {})
 
             # Update commits with results
-            scored_commits = []
+            scored_commits: list[MinerChallengeCommit] = []
+            scored_encrypted_commits_set = set()
             for commit in revealed_commits:
                 if not commit.encrypted_commit:
                     continue
@@ -521,8 +530,11 @@ class Validator(BaseValidator):
                         ).items()
                     }
                     scored_commits.append(commit)
+                    scored_encrypted_commits_set.add(commit.encrypted_commit)
 
-            return scored_commits, data.get("is_done", False)
+            return scored_commits, data.get("is_done", False) or len(
+                encrypted_commits_set
+            ) == len(scored_encrypted_commits_set)
 
         except Exception:
             bt.logging.error(
@@ -563,10 +575,10 @@ class Validator(BaseValidator):
             f"[SET WEIGHTS] uint_weights: {uint_weights}, processed_weights: {processed_weights}"
         )
 
+        # Set weights on-chain
         max_retries = 5
-        delay_between_retries = 12  # seconds
+        delay_between_retries = 12  # 1 block
         for attempt in range(max_retries):
-            # Set weights on-chain
             result, log = self.subtensor.set_weights(
                 wallet=self.wallet,
                 netuid=self.config.netuid,
@@ -582,14 +594,12 @@ class Validator(BaseValidator):
                 bt.logging.error(f"[SET WEIGHTS]: {log}")
                 if "No attempt made." in log:
                     break
+
                 if attempt < max_retries - 1:
                     bt.logging.info(f"Retrying in {delay_between_retries} seconds...")
                     time.sleep(delay_between_retries)
                 else:
-                    fail_msg = f"Failed to set weights after {max_retries} attempts."
-                    bt.logging.info(fail_msg)
-                    # caught in redteam_core.BaseValidator.run method
-                    raise Exception(fail_msg)
+                    bt.logging.info(f"Failed to set weights after {max_retries} attempts.")
 
     # MARK: Commit Management
     def update_miner_commits(self, active_challenges: dict):
@@ -639,9 +649,9 @@ class Validator(BaseValidator):
                         key=keys.get(challenge_name),
                     )
                     # Update miner commit
-                    this_miner_commit[challenge_name] = current_miner_challenge_commit = (
-                        new_commit
-                    )
+                    this_miner_commit[challenge_name] = (
+                        current_miner_challenge_commit
+                    ) = new_commit
                 elif keys.get(challenge_name):
                     current_miner_challenge_commit.key = keys.get(challenge_name)
 
@@ -673,7 +683,7 @@ class Validator(BaseValidator):
         self.miner_commits = {
             (uid, hotkey): commits
             for (uid, hotkey), commits in self.miner_commits.items()
-            if hotkey in self.metagraph.hotkeys
+            if (uid < len(self.metagraph.hotkeys) and hotkey == self.metagraph.hotkeys[uid])
         }
 
         # Sort by UID to make sure all next operations are order consistent
@@ -727,13 +737,15 @@ class Validator(BaseValidator):
 
     # MARK: Storage
     def _store_miner_commits(
-        self, miner_commits: dict[str, list[MinerChallengeCommit]] = {}
+        self, miner_commits: dict[str, list[MinerChallengeCommit]] = None
     ):
         """
         Store miner commits to storage.
         """
         if not miner_commits:
+            miner_commits = {}
             # Default to store all miner commits
+            bt.logging.info("[STORE MINER COMMMITS] Storing all commits in self.miner_commits")
             for _, miner_challenge_commits in self.miner_commits.items():
                 for challenge_name, commit in miner_challenge_commits.items():
                     miner_commits.setdefault(challenge_name, []).append(commit)
@@ -743,6 +755,10 @@ class Validator(BaseValidator):
             for challenge_name, commits in miner_commits.items()
             for commit in commits
         ]
+
+        bt.logging.info(
+            f"[STORE MINER COMMMITS] Storing {len(data_to_store)} commits to storage: {[commit.encrypted_commit[:15] for commit in data_to_store]}"
+        )
 
         try:
             self.storage_manager.update_commit_batch(
@@ -910,9 +926,10 @@ class Validator(BaseValidator):
         # Try to load miner commits from challenge managers
         for challenge_name, manager in self.challenge_managers.items():
             for miner_state in manager.miner_states.values():
-                self.miner_commits[
-                    (miner_state.miner_uid, miner_state.miner_hotkey)
-                ] = {challenge_name: miner_state.latest_commit}
+                if miner_state.latest_commit:
+                    self.miner_commits.setdefault(
+                        (miner_state.miner_uid, miner_state.miner_hotkey), {}
+                    )[challenge_name] = miner_state.latest_commit
 
 
 if __name__ == "__main__":
