@@ -3,7 +3,9 @@ import asyncio
 from typing import Callable, List, Tuple
 import numpy as np
 import bittensor as bt
+from bittensor.core.settings import SS58_FORMAT, TYPE_REGISTRY
 from bittensor.utils.weight_utils import process_weights_for_netuid
+from substrateinterface import SubstrateInterface
 
 from bitmind.utils import fail_with_none
 
@@ -92,16 +94,36 @@ def create_subscription_handler(substrate, callback: Callable):
     return inner
 
 
-def start_subscription(substrate, callback: Callable):
+# def start_subscription(substrate, callback: Callable):
+#     return substrate.subscribe_block_headers(
+#         create_subscription_handler(substrate, callback)
+#     )
+def start_subscription(chain_endpoint, callback: Callable):
+    substrate = SubstrateInterface(
+        ss58_format=SS58_FORMAT,
+        use_remote_preset=True,
+        url=chain_endpoint,
+        type_registry=TYPE_REGISTRY,
+    )
     return substrate.subscribe_block_headers(
         create_subscription_handler(substrate, callback)
     )
 
 
-def run_block_callback_thread(substrate, callback: Callable):
+# def run_block_callback_thread(substrate, callback: Callable):
+#     try:
+#         subscription_thread = threading.Thread(
+#             target=start_subscription, args=[substrate, callback], daemon=True
+#         )
+#         subscription_thread.start()
+#         bt.logging.info("Block subscription started in background thread.")
+#         return subscription_thread
+#     except Exception as e:
+#         bt.logging.error(f"faaailuuure {callback} - {e}")
+def run_block_callback_thread(chain_endpoint, callback: Callable):
     try:
         subscription_thread = threading.Thread(
-            target=start_subscription, args=[substrate, callback], daemon=True
+            target=start_subscription, args=[chain_endpoint, callback], daemon=True
         )
         subscription_thread.start()
         bt.logging.info("Block subscription started in background thread.")
