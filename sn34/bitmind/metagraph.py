@@ -84,12 +84,16 @@ def create_set_weights(version: int, netuid: int):
 
 def create_subscription_handler(substrate, callback: Callable):
     def inner(obj, update_nr, _):
-        substrate.get_block(block_number=obj["header"]["number"])
-
-        if update_nr >= 1:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            return loop.run_until_complete(callback(obj["header"]["number"]))
+        try:
+            substrate.get_block(block_number=obj["header"]["number"])
+        except Exception as err:
+            bt.logging.error(f"Sol: substrate.get_block failed: {err}")
+            raise err
+        finally:
+            if update_nr >= 1:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                return loop.run_until_complete(callback(obj["header"]["number"]))
 
     return inner
 
@@ -99,15 +103,22 @@ def create_subscription_handler(substrate, callback: Callable):
 #         create_subscription_handler(substrate, callback)
 #     )
 def start_subscription(chain_endpoint, callback: Callable):
-    substrate = SubstrateInterface(
-        ss58_format=SS58_FORMAT,
-        use_remote_preset=True,
-        url=chain_endpoint,
-        type_registry=TYPE_REGISTRY,
-    )
-    return substrate.subscribe_block_headers(
-        create_subscription_handler(substrate, callback)
-    )
+    while True:
+        substrate = SubstrateInterface(
+            ss58_format=SS58_FORMAT,
+            use_remote_preset=True,
+            url=chain_endpoint,
+            type_registry=TYPE_REGISTRY,
+        )
+        try:
+            return substrate.subscribe_block_headers(
+                create_subscription_handler(substrate, callback)
+            )
+        except Exception as err:
+            bt.logging.error(
+                "Sol: create_subscription_handler failed. "
+                f"Re-creating substrate: {err}"
+            )
 
 
 # def run_block_callback_thread(substrate, callback: Callable):
