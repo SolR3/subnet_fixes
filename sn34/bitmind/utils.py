@@ -48,7 +48,10 @@ def on_block_interval(interval_attr_name):
             if interval is None:
                 bt.logging.error(f"No interval found for {interval_attr_name}")
             if (
-                block == 0 or block % interval == 0
+                block == 0 or block % interval == 0 or (
+                    interval_attr_name == "epoch_length"
+                    and (block - self.last_weight_set_block) > interval
+                )
             ):  # Allow execution on block 0 for initialization
                 bt.logging.info(f"Sol: Calling '{func}' on block {block}")
                 return await func(self, block, *args, **kwargs)

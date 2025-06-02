@@ -131,6 +131,9 @@ class BaseNeuron:
         self.check_registered()
         self.uid = self.metagraph.hotkeys.index(self.wallet.hotkey.ss58_address)
 
+        # Initialize last weight set block
+        self.last_weight_set_block = self.metagraph.last_update[self.uid]
+
         ## Substrate, Subtensor and Metagraph
         self.block_callbacks.append(self.maybe_sync_metagraph)
         self.substrate_thread = run_block_callback_thread(

@@ -323,6 +323,7 @@ class Validator(BaseNeuron):
                 self.wallet, self.metagraph, self.subtensor, (uids, weights)
             )
             bt.logging.success("Weights set successfully")
+            self.last_weight_set_block = block
 
         except Exception as e:
             bt.logging.error(f"Error in set_weights_on_interval: {e}")
