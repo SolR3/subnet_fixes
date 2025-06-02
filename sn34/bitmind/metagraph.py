@@ -87,6 +87,7 @@ def create_subscription_handler(substrate, callback: Callable):
         try:
             substrate.get_block(block_number=obj["header"]["number"])
         except Exception as err:
+            substrate.connect_websocket()
             bt.logging.error(f"Sol: substrate.get_block failed: {err}")
             raise err
         finally:
