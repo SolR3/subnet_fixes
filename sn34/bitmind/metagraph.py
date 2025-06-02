@@ -119,6 +119,8 @@ def start_subscription(chain_endpoint, callback: Callable):
                 "Sol: create_subscription_handler failed. "
                 f"Re-creating substrate: {err}"
             )
+            import traceback
+            traceback.print_exc()
 
 
 # def run_block_callback_thread(substrate, callback: Callable):
