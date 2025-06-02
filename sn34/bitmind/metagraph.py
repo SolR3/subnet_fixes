@@ -103,10 +103,6 @@ def create_subscription_handler(substrate, callback: Callable):
     return inner
 
 
-# def start_subscription(substrate, callback: Callable):
-#     return substrate.subscribe_block_headers(
-#         create_subscription_handler(substrate, callback)
-#     )
 def start_subscription(chain_endpoint, callback: Callable):
     while True:
         substrate = SubstrateInterface(
@@ -128,16 +124,6 @@ def start_subscription(chain_endpoint, callback: Callable):
             traceback.print_exc()
 
 
-# def run_block_callback_thread(substrate, callback: Callable):
-#     try:
-#         subscription_thread = threading.Thread(
-#             target=start_subscription, args=[substrate, callback], daemon=True
-#         )
-#         subscription_thread.start()
-#         bt.logging.info("Block subscription started in background thread.")
-#         return subscription_thread
-#     except Exception as e:
-#         bt.logging.error(f"faaailuuure {callback} - {e}")
 def run_block_callback_thread(chain_endpoint, callback: Callable):
     try:
         subscription_thread = threading.Thread(

@@ -13,8 +13,6 @@ from typing import Any, Dict, Optional
 import aiohttp
 import bittensor as bt
 import numpy as np
-# from bittensor.core.settings import SS58_FORMAT, TYPE_REGISTRY
-# from substrateinterface import SubstrateInterface
 
 from bitmind import __spec_version__ as spec_version
 from bitmind.autoupdater import autoupdate
@@ -133,15 +131,6 @@ class Validator(BaseNeuron):
             # Make sure our substrate thread is alive
             if not self.substrate_thread.is_alive():
                 bt.logging.info("Restarting substrate interface due to killed node")
-                # self.substrate = SubstrateInterface(
-                #     ss58_format=SS58_FORMAT,
-                #     use_remote_preset=True,
-                #     url=self.config.subtensor.chain_endpoint,
-                #     type_registry=TYPE_REGISTRY,
-                # )
-                # self.substrate_thread = run_block_callback_thread(
-                #     self.substrate, self.run_callbacks
-                # )
                 self.substrate_thread = run_block_callback_thread(
                     self.config.subtensor.chain_endpoint, self.run_callbacks
                 )

@@ -6,9 +6,7 @@ import copy
 import inspect
 import traceback
 
-# from bittensor.core.settings import SS58_FORMAT, TYPE_REGISTRY
 from nest_asyncio import asyncio
-# from substrateinterface import SubstrateInterface
 import signal
 
 from bitmind import (
@@ -134,17 +132,7 @@ class BaseNeuron:
         self.uid = self.metagraph.hotkeys.index(self.wallet.hotkey.ss58_address)
 
         ## Substrate, Subtensor and Metagraph
-        # self.substrate = SubstrateInterface(
-        #     ss58_format=SS58_FORMAT,
-        #     use_remote_preset=True,
-        #     url=self.config.subtensor.chain_endpoint,
-        #     type_registry=TYPE_REGISTRY,
-        # )
-
         self.block_callbacks.append(self.maybe_sync_metagraph)
-        # self.substrate_thread = run_block_callback_thread(
-        #     self.substrate, self.run_callbacks
-        # )
         self.substrate_thread = run_block_callback_thread(
             self.config.subtensor.chain_endpoint, self.run_callbacks
         )
