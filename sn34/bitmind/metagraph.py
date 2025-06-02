@@ -84,9 +84,11 @@ def create_set_weights(version: int, netuid: int):
 
 def create_subscription_handler(substrate, callback: Callable):
     def inner(obj, update_nr, _):
+        error = False
         try:
             substrate.get_block(block_number=obj["header"]["number"])
         except Exception as err:
+            error = True
             substrate.connect_websocket()
             bt.logging.error(f"Sol: substrate.get_block failed: {err}")
             raise err
@@ -94,7 +96,9 @@ def create_subscription_handler(substrate, callback: Callable):
             if update_nr >= 1:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
-                return loop.run_until_complete(callback(obj["header"]["number"]))
+                retval = loop.run_until_complete(callback(obj["header"]["number"]))
+                if not error:
+                    return retval
 
     return inner
 
