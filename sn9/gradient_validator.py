@@ -520,13 +520,25 @@ class GradientValidator(BaseNeuron):
 
                     # Get global weights from API
                     global_weights: dict[int, float] = await self.api_client.get_global_miner_weights()
-                    try:
-                        global_weights = {int(uid): weight for uid, weight in global_weights.items()}
-                    except ValueError:
-                        m = self.metagraph or self.subtensor.metagraph(netuid=int(settings.netuid))
-                        global_weights = {
-                            int(m.uids[m.hotkeys.index(hk)]): weight for hk, weight in global_weights.items()
-                        }
+                    # try:
+                    #     global_weights = {int(uid): weight for uid, weight in global_weights.items()}
+                    # except ValueError:
+                    #     m = self.metagraph or self.subtensor.metagraph(netuid=int(settings.netuid))
+                    #     global_weights = {
+                    #         int(m.uids[m.hotkeys.index(hk)]): weight for hk, weight in global_weights.items()
+                    #     }
+                    #
+                    # the keys in global_weights is a mix of uids and hotkeys
+                    #
+                    m = self.metagraph or self.subtensor.metagraph(netuid=int(settings.netuid))
+                    gw_temp = {}
+                    for key, weight in global_weights.items():
+                        try:
+                            uid = int(key)
+                        except ValueError:
+                            uid = int(m.uids[m.hotkeys.index(key)])
+                        gw_temp[uid] = weight
+                    global_weights = gw_temp
                 else:
                     register_validator = True
                     logger.warning("Orchestrator is not healthy, skipping weight submission")
