@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import sys
 import time
 from typing import Literal
 
@@ -27,6 +28,7 @@ from settings import (
     WEIGHT_MAGNITUDE_THRESHOLD,
 )
 from storage.serializers import StorageResponse, ValidationEvent
+from utils.bt_utils import NotRegisteredError
 from utils.s3_interactions import download_activation, download_weights_or_optimizer_state
 from utils.vector_utils import flatten_optimizer_state
 
@@ -45,7 +47,13 @@ class GradientValidator(BaseNeuron):
     async def create(cls):
         """Factory method to create and initialize a GradientValidator instance"""
         validator = cls()
-        await validator.initialize()  # Initialize the base class
+        try:
+            await validator.initialize()  # Initialize the base class
+        except NotRegisteredError as e:
+            logger.error("Validator not registered, waiting for 10 minutes and then quitting")
+            # Quit the program if this happens
+            await asyncio.sleep(600)
+            sys.exit("Validator not registered")
         validator.metagraph_syncer.register_listener(validator._on_metagraph_updated, netuids=[validator.netuid])
         while True:
             if await validator.api_client.health_check():
@@ -54,11 +62,12 @@ class GradientValidator(BaseNeuron):
             await asyncio.sleep(5 if settings.MOCK else 30)
         validator.external_ip = requests.get("https://checkip.amazonaws.com").text.strip()
         logger.debug(f"External IP: {validator.external_ip}")
-        await validator.api_client.register_validator(
+        response = await validator.api_client.register_validator(
             host=validator.external_ip,
             port=int(settings.VALIDATOR_EXTERNAL_PORT),
             scheme=settings.VALIDATOR_SCHEME,
         )
+        validator.orchestrator_version = str(response.get("version"))
         return validator
 
     def _on_metagraph_updated(self, metagraph: bt.metagraph, netuid: int):
@@ -215,7 +224,6 @@ class GradientValidator(BaseNeuron):
             is_valid, score, reason = await self.validate_activations(
                 validator_activations, miner_activations.to(DEVICE), direction="forward", activation_uid=activation_uid
             )
-            self.processed_forward_activations.append(activation_uid)
             self.saved_forward_activations[activation_uid] = (
                 activations,
                 validator_activations,
@@ -267,7 +275,12 @@ class GradientValidator(BaseNeuron):
                 # Get the embedding layer weight grads  instead of the input activations grads
                 # This is because input activation grads of the first layer do not exist.
                 emb_weight = self.model.tok_emb.weight
-                input_activation_grads = emb_weight.grad[:SEQUENCE_LENGTH]
+                grad_size = (
+                    settings.MODEL_CFG["bottleneck_dim"]
+                    if settings.MODEL_CFG["bottleneck_dim"] is not None
+                    else settings.MODEL_CFG["emb_dim"]
+                )
+                input_activation_grads = emb_weight.grad[:SEQUENCE_LENGTH, :grad_size]
 
                 # Detach and convert to bfloat16 to ensure we only save the values
                 input_activation_grads = input_activation_grads.detach().to(torch.bfloat16).cpu()
@@ -292,7 +305,6 @@ class GradientValidator(BaseNeuron):
                 activation_uid=activation_uid,
             )
             del self.saved_forward_activations[activation_uid]
-            self.processed_backward_activations.append(activation_uid)
             logger.debug(
                 f"GRADIENT VALIDATOR [MINER {self.tracked_miner}]: BACKWARD PASS COMPLETE: VALID: {is_valid}, SCORE: {score}, REASON: {reason}"
             )
@@ -638,7 +650,7 @@ class GradientValidator(BaseNeuron):
             # Save validation events to file before resetting
             await self._save_validation_events()
 
-            self.api_client = APIClient(self.wallet)
+            self.api_client = APIClient(self.wallet, orchestrator_version=self.orchestrator_version)
             await self.api_client.__aenter__()
 
             # The orchestrator tracks all the miner weights in uid space, but in the validator, we use self.tracked_miner which is a hotkey.
@@ -653,8 +665,6 @@ class GradientValidator(BaseNeuron):
             self.layer = None
             self.weights = None
             self.saved_forward_activations = {}
-            self.processed_forward_activations = []
-            self.processed_backward_activations = []
             self.miner_weights = {}
             self.model = None
             self.optimizer = None
