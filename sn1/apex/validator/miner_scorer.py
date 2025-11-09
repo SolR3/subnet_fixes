@@ -38,6 +38,7 @@ class MinerScorer:
                 logger.info("Successfully set weights")
             else:
                 logger.error("Failed to set weights")
+            logger.info(f"Waiting {self.interval} seconds until next set weights attempt.")
             await asyncio.sleep(self.interval)
 
     async def shutdown(self) -> None:
